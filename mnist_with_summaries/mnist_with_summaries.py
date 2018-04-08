@@ -122,19 +122,10 @@ def train():
   y = nn_layer(dropped, 42, 10, 'layer2', act=tf.identity)
 
   with tf.name_scope('cross_entropy'):
-    # The raw formulation of cross-entropy,
-    #
-    # tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.softmax(y)),
-    #                               reduction_indices=[1]))
-    #
-    # can be numerically unstable.
-    #
-    # So here we use tf.losses.sparse_softmax_cross_entropy on the
-    # raw logit outputs of the nn_layer above, and then average across
-    # the batch.
     with tf.name_scope('total'):
-      cross_entropy = tf.losses.sparse_softmax_cross_entropy(
-          labels=y_, logits=y)
+      one_hot_labels = tf.cast(tf.one_hot(y_, depth=10), tf.float32)
+      cross_entropy = tf.reduce_mean(
+          -tf.reduce_sum(one_hot_labels * tf.log(tf.nn.softmax(y))))
   tf.summary.scalar('cross_entropy', cross_entropy)
 
   with tf.name_scope('train'):
