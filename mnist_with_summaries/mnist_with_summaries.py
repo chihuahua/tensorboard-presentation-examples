@@ -53,11 +53,7 @@ def train():
     tf.summary.image('input', image_shaped_input, 10)
 
   with tf.name_scope('conv_layer'):
-    # Convolutional Layer #1
-    # Computes 32 features using a 5x5 filter with ReLU activation.
-    # Padding is added to preserve width and height.
-    # Input Tensor Shape: [batch_size, 28, 28, 1]
-    # Output Tensor Shape: [batch_size, 28, 28, 32]
+    # Convolutional Layer
     conv1 = tf.layers.conv2d(
         inputs=image_shaped_input,
         filters=12,
