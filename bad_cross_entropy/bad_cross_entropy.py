@@ -29,11 +29,59 @@ import os
 import sys
 
 import tensorflow as tf
+from tensorflow.python import debug as tf_debug
 
 from tensorflow.examples.tutorials.mnist import input_data
 
 FLAGS = None
 
+
+
+# We can't initialize these variables to 0 - the network will get stuck.
+def weight_variable(shape):
+  """Create a weight variable with appropriate initialization."""
+  initial = tf.truncated_normal(shape, stddev=0.1)
+  return tf.Variable(initial)
+
+def bias_variable(shape):
+  """Create a bias variable with appropriate initialization."""
+  initial = tf.constant(0.1, shape=shape)
+  return tf.Variable(initial)
+
+def variable_summaries(var):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
+
+def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+  """Reusable code for making a simple neural net layer.
+
+  It does a matrix multiply, bias add, and then uses ReLU to nonlinearize.
+  It also sets up name scoping so that the resultant graph is easy to read,
+  and adds a number of summary ops.
+  """
+  # Adding a name scope ensures logical grouping of the layers in the graph.
+  with tf.name_scope(layer_name):
+    # This Variable will hold the state of the weights for the layer
+    with tf.name_scope('weights'):
+      weights = weight_variable([input_dim, output_dim])
+      variable_summaries(weights)
+    with tf.name_scope('biases'):
+      biases = bias_variable([output_dim])
+      variable_summaries(biases)
+    with tf.name_scope('Wx_plus_b'):
+      preactivate = tf.matmul(input_tensor, weights) + biases
+      tf.summary.histogram('pre_activations', preactivate)
+    activations = act(preactivate, name='activation')
+    tf.summary.histogram('activations', activations)
+    return activations
 
 def train():
   # Import data
@@ -41,6 +89,11 @@ def train():
                                     fake_data=FLAGS.fake_data)
 
   sess = tf.InteractiveSession()
+
+  if FLAGS.tensorboard_debug_address:
+    sess = tf_debug.TensorBoardDebugWrapperSession(
+        sess, FLAGS.tensorboard_debug_address)
+
   # Create a multilayer model.
 
   # Input placeholders
@@ -54,64 +107,21 @@ def train():
 
   with tf.name_scope('conv_layer'):
     # Convolutional Layer
-    conv1 = tf.layers.conv2d(
-        inputs=image_shaped_input,
-        filters=12,
-        kernel_size=[5, 5],
-        padding="same",
-        activation=tf.nn.relu)
+    W_conv = weight_variable([5, 5, 1, 12])
+    b_conv = bias_variable([12])
+    conv = tf.nn.conv2d(
+        image_shaped_input,
+        W_conv,
+        strides=[1, 1, 1, 1],
+        padding='SAME')
+    h = tf.nn.relu(conv + b_conv)
+    pool = tf.nn.max_pool(h,
+                          ksize=[1, 2, 2, 1],
+                          strides=[1, 2, 2, 1],
+                          padding='SAME')
 
-    # Pooling Layer
-    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
-
-  # We can't initialize these variables to 0 - the network will get stuck.
-  def weight_variable(shape):
-    """Create a weight variable with appropriate initialization."""
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    return tf.Variable(initial)
-
-  def bias_variable(shape):
-    """Create a bias variable with appropriate initialization."""
-    initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)
-
-  def variable_summaries(var):
-    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-    with tf.name_scope('summaries'):
-      mean = tf.reduce_mean(var)
-      tf.summary.scalar('mean', mean)
-      with tf.name_scope('stddev'):
-        stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-      tf.summary.scalar('stddev', stddev)
-      tf.summary.scalar('max', tf.reduce_max(var))
-      tf.summary.scalar('min', tf.reduce_min(var))
-      tf.summary.histogram('histogram', var)
-
-  def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
-    """Reusable code for making a simple neural net layer.
-
-    It does a matrix multiply, bias add, and then uses ReLU to nonlinearize.
-    It also sets up name scoping so that the resultant graph is easy to read,
-    and adds a number of summary ops.
-    """
-    # Adding a name scope ensures logical grouping of the layers in the graph.
-    with tf.name_scope(layer_name):
-      # This Variable will hold the state of the weights for the layer
-      with tf.name_scope('weights'):
-        weights = weight_variable([input_dim, output_dim])
-        variable_summaries(weights)
-      with tf.name_scope('biases'):
-        biases = bias_variable([output_dim])
-        variable_summaries(biases)
-      with tf.name_scope('Wx_plus_b'):
-        preactivate = tf.matmul(input_tensor, weights) + biases
-        tf.summary.histogram('pre_activations', preactivate)
-      activations = act(preactivate, name='activation')
-      tf.summary.histogram('activations', activations)
-      return activations
-
-  pool1_flattened = tf.layers.flatten(pool1)
-  hidden1 = nn_layer(pool1_flattened, 2352, 42, 'layer1')
+  pool_flattened = tf.layers.flatten(pool)
+  hidden1 = nn_layer(pool_flattened, 2352, 42, 'layer1')
 
   with tf.name_scope('dropout'):
     keep_prob = tf.placeholder(tf.float32)
@@ -223,5 +233,12 @@ if __name__ == '__main__':
       default=os.path.join(os.getenv('TEST_TMPDIR', '/tmp'),
                            'tensorflow/mnist/logs/mnist_with_summaries'),
       help='Summaries log directory')
+  parser.add_argument(
+      "--tensorboard_debug_address",
+      type=str,
+      default=None,
+      help="Connect to the TensorBoard Debugger Plugin backend specified by "
+      "the gRPC address (e.g., localhost:1234). Mutually exclusive with the "
+      "--debug flag.")
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)

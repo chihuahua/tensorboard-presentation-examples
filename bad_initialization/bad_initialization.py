@@ -35,6 +35,51 @@ from tensorflow.examples.tutorials.mnist import input_data
 FLAGS = None
 
 
+def weight_variable(shape):
+  """Create a weight variable with appropriate initialization."""
+  initial = tf.zeros(shape)
+  return tf.Variable(initial)
+
+def bias_variable(shape):
+  """Create a bias variable with appropriate initialization."""
+  initial = tf.constant(0.1, shape=shape)
+  return tf.Variable(initial)
+
+def variable_summaries(var):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
+
+def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+  """Reusable code for making a simple neural net layer.
+
+  It does a matrix multiply, bias add, and then uses ReLU to nonlinearize.
+  It also sets up name scoping so that the resultant graph is easy to read,
+  and adds a number of summary ops.
+  """
+  # Adding a name scope ensures logical grouping of the layers in the graph.
+  with tf.name_scope(layer_name):
+    # This Variable will hold the state of the weights for the layer
+    with tf.name_scope('weights'):
+      weights = weight_variable([input_dim, output_dim])
+      variable_summaries(weights)
+    with tf.name_scope('biases'):
+      biases = bias_variable([output_dim])
+      variable_summaries(biases)
+    with tf.name_scope('Wx_plus_b'):
+      preactivate = tf.matmul(input_tensor, weights) + biases
+      tf.summary.histogram('pre_activations', preactivate)
+    activations = act(preactivate, name='activation')
+    tf.summary.histogram('activations', activations)
+    return activations
+
 def train():
   # Import data
   mnist = input_data.read_data_sets(FLAGS.data_dir,
@@ -54,63 +99,21 @@ def train():
 
   with tf.name_scope('conv_layer'):
     # Convolutional Layer
-    conv1 = tf.layers.conv2d(
-        inputs=image_shaped_input,
-        filters=12,
-        kernel_size=[5, 5],
-        padding="same",
-        activation=tf.nn.relu)
+    W_conv = weight_variable([5, 5, 1, 12])
+    b_conv = bias_variable([12])
+    conv = tf.nn.conv2d(
+        image_shaped_input,
+        W_conv,
+        strides=[1, 1, 1, 1],
+        padding='SAME')
+    h = tf.nn.relu(conv + b_conv)
+    pool = tf.nn.max_pool(h,
+                          ksize=[1, 2, 2, 1],
+                          strides=[1, 2, 2, 1],
+                          padding='SAME')
 
-    # Pooling Layer
-    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
-
-  def weight_variable(shape):
-    """Create a weight variable with appropriate initialization."""
-    initial = tf.zeros(shape)
-    return tf.Variable(initial)
-
-  def bias_variable(shape):
-    """Create a bias variable with appropriate initialization."""
-    initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)
-
-  def variable_summaries(var):
-    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-    with tf.name_scope('summaries'):
-      mean = tf.reduce_mean(var)
-      tf.summary.scalar('mean', mean)
-      with tf.name_scope('stddev'):
-        stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-      tf.summary.scalar('stddev', stddev)
-      tf.summary.scalar('max', tf.reduce_max(var))
-      tf.summary.scalar('min', tf.reduce_min(var))
-      tf.summary.histogram('histogram', var)
-
-  def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
-    """Reusable code for making a simple neural net layer.
-
-    It does a matrix multiply, bias add, and then uses ReLU to nonlinearize.
-    It also sets up name scoping so that the resultant graph is easy to read,
-    and adds a number of summary ops.
-    """
-    # Adding a name scope ensures logical grouping of the layers in the graph.
-    with tf.name_scope(layer_name):
-      # This Variable will hold the state of the weights for the layer
-      with tf.name_scope('weights'):
-        weights = weight_variable([input_dim, output_dim])
-        variable_summaries(weights)
-      with tf.name_scope('biases'):
-        biases = bias_variable([output_dim])
-        variable_summaries(biases)
-      with tf.name_scope('Wx_plus_b'):
-        preactivate = tf.matmul(input_tensor, weights) + biases
-        tf.summary.histogram('pre_activations', preactivate)
-      activations = act(preactivate, name='activation')
-      tf.summary.histogram('activations', activations)
-      return activations
-
-  pool1_flattened = tf.layers.flatten(pool1)
-  hidden1 = nn_layer(pool1_flattened, 2352, 42, 'layer1')
+  pool_flattened = tf.layers.flatten(pool)
+  hidden1 = nn_layer(pool_flattened, 2352, 42, 'layer1')
 
   with tf.name_scope('dropout'):
     keep_prob = tf.placeholder(tf.float32)
@@ -135,7 +138,7 @@ def train():
       one_hot_labels = tf.cast(tf.one_hot(y_, depth=10), tf.float32)
       cross_entropy = tf.reduce_mean(
           -tf.reduce_sum(one_hot_labels * tf.log(y)))
-  tf.summary.scalar('cross_entropy', cross_entropy)
+      tf.summary.scalar('cross_entropy', cross_entropy)
 
   with tf.name_scope('train'):
     train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(
@@ -146,7 +149,7 @@ def train():
       correct_prediction = tf.equal(tf.argmax(y, 1), y_)
     with tf.name_scope('accuracy'):
       accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-  tf.summary.scalar('accuracy', accuracy)
+      tf.summary.scalar('accuracy', accuracy)
 
   # Merge all the summaries and write them out to
   # /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
