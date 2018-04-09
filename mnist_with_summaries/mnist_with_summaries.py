@@ -28,6 +28,7 @@ import argparse
 import os
 import sys
 
+import tensorboard as tb
 import tensorflow as tf
 
 from tensorflow.examples.tutorials.mnist import input_data
@@ -126,9 +127,11 @@ def train():
 
   with tf.name_scope('cross_entropy'):
     with tf.name_scope('total'):
-      one_hot_labels = tf.cast(tf.one_hot(y_, depth=10), tf.float32)
+      one_hot_label_ints = tf.one_hot(y_, depth=10)
+      one_hot_labels = tf.cast(one_hot_label_ints, tf.float32)
+      probabilities = tf.nn.softmax(y)
       cross_entropy = tf.reduce_mean(
-          -tf.reduce_sum(one_hot_labels * tf.log(tf.nn.softmax(y))))
+          -tf.reduce_sum(one_hot_labels * tf.log(probabilities)))
       tf.summary.scalar('cross_entropy', cross_entropy)
 
   with tf.name_scope('train'):
@@ -142,10 +145,17 @@ def train():
       accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
       tf.summary.scalar('accuracy', accuracy)
 
+  for i in range(10):
+    tb.summary.pr_curve(
+        name='digit_%d' % i,
+        labels=tf.cast(one_hot_label_ints[..., i], tf.bool),
+        predictions=probabilities[..., i])
+
   embedding_size = 42
   embedding = tf.Variable(
       tf.zeros([1024, embedding_size]), name="test_embedding")
-  assignment = embedding.assign(hidden1)
+  assignment = embedding.assign(
+      tf.reshape(hidden1, [1024, embedding_size]))
   saver = tf.train.Saver()
 
   # Configure the embedding.
