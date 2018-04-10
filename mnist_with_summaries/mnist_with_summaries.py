@@ -145,11 +145,16 @@ def train():
       accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
       tf.summary.scalar('accuracy', accuracy)
 
-  for i in range(10):
-    tb.summary.pr_curve(
-        name='digit_%d' % i,
-        labels=tf.cast(one_hot_label_ints[..., i], tf.bool),
-        predictions=probabilities[..., i])
+  merged_train_summaries = tf.summary.merge_all()
+
+  with tf.name_scope('pr_curves'):
+    pr_curve_update_ops = []
+    for i in range(10):
+      _, pr_curve_update_op = tb.summary.pr_curve_streaming_op(
+          name='digit_%d' % i,
+          labels=tf.cast(one_hot_label_ints[..., i], tf.bool),
+          predictions=probabilities[..., i])
+      pr_curve_update_ops.append(pr_curve_update_op)
 
   embedding_size = 42
   embedding = tf.Variable(
@@ -173,7 +178,7 @@ def train():
 
   # Merge all the summaries and write them out to
   # /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
-  merged = tf.summary.merge_all()
+  merged_test_summaries = tf.summary.merge_all()
   train_writer = tf.summary.FileWriter(FLAGS.log_dir + '/train', sess.graph)
   test_writer = tf.summary.FileWriter(FLAGS.log_dir + '/test')
   tf.global_variables_initializer().run()
@@ -197,10 +202,18 @@ def train():
 
     return {x: xs, y_: ys, keep_prob: k}
 
+  sess.run(tf.global_variables_initializer())
+  sess.run(tf.local_variables_initializer())
   for i in range(FLAGS.max_steps):
-    if i % 10 == 0:  # Record summaries and test-set accuracy
+    if i % 10 == 0:
+      # Update PR curve data.
+      sess.run(
+          pr_curve_update_ops,
+          feed_dict=feed_dict(tf.contrib.learn.ModeKeys.EVAL))
+
+      # Record summaries and test-set accuracy.
       summary, acc = sess.run(
-          [merged, accuracy],
+          [merged_test_summaries, accuracy],
           feed_dict=feed_dict(tf.contrib.learn.ModeKeys.EVAL))
       test_writer.add_summary(summary, i)
       print('Accuracy at step %s: %s' % (i, acc))
@@ -208,7 +221,7 @@ def train():
       if i % 100 == 99:  # Record execution stats
         run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = tf.RunMetadata()
-        summary, _ = sess.run([merged, train_step],
+        summary, _ = sess.run([merged_train_summaries, train_step],
                               feed_dict=feed_dict(
                                   tf.contrib.learn.ModeKeys.TRAIN),
                               options=run_options,
@@ -218,7 +231,7 @@ def train():
         print('Adding run metadata for', i)
       else:  # Record a summary
         summary, _ = sess.run(
-            [merged, train_step],
+            [merged_train_summaries, train_step],
             feed_dict=feed_dict(tf.contrib.learn.ModeKeys.TRAIN))
         train_writer.add_summary(summary, i)
 

@@ -1,0 +1,4 @@
+model_checkpoint_path: "/tmp/tensorflow/mnist/logs/run_1.00e-03_6.00e-01/model.ckpt-1000"
+all_model_checkpoint_paths: "/tmp/tensorflow/mnist/logs/run_1.00e-03_6.00e-01/model.ckpt-0"
+all_model_checkpoint_paths: "/tmp/tensorflow/mnist/logs/run_1.00e-03_6.00e-01/model.ckpt-500"
+all_model_checkpoint_paths: "/tmp/tensorflow/mnist/logs/run_1.00e-03_6.00e-01/model.ckpt-1000"
