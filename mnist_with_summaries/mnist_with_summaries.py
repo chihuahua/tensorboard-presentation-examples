@@ -156,25 +156,26 @@ def train():
           predictions=probabilities[..., i])
       pr_curve_update_ops.append(pr_curve_update_op)
 
-  embedding_size = 42
-  embedding = tf.Variable(
-      tf.zeros([1024, embedding_size]), name="test_embedding")
-  assignment = embedding.assign(
-      tf.reshape(hidden1, [1024, embedding_size]))
-  saver = tf.train.Saver()
+  with tf.name_scope('create_embedding'):
+    embedding_size = 42
+    embedding = tf.Variable(
+        tf.zeros([1024, embedding_size]), name="test_embedding")
+    assignment = embedding.assign(
+        tf.reshape(hidden1, [1024, embedding_size]))
+    saver = tf.train.Saver()
 
-  # Configure the embedding.
-  main_writer = tf.summary.FileWriter(FLAGS.log_dir, sess.graph)
-  config = tf.contrib.tensorboard.plugins.projector.ProjectorConfig()
-  config.model_checkpoint_path = ''
-  embedding_config = config.embeddings.add()
-  embedding_config.tensor_name = embedding.name
-  embedding_config.sprite.image_path = 'sprite_1024.png'
-  embedding_config.metadata_path = 'labels_1024.tsv'
-  # Specify the width and height of a single thumbnail.
-  embedding_config.sprite.single_image_dim.extend([28, 28])
-  tf.contrib.tensorboard.plugins.projector.visualize_embeddings(
-      main_writer, config)
+    # Configure the embedding.
+    main_writer = tf.summary.FileWriter(FLAGS.log_dir, sess.graph)
+    config = tf.contrib.tensorboard.plugins.projector.ProjectorConfig()
+    config.model_checkpoint_path = ''
+    embedding_config = config.embeddings.add()
+    embedding_config.tensor_name = embedding.name
+    embedding_config.sprite.image_path = 'sprite_1024.png'
+    embedding_config.metadata_path = 'labels_1024.tsv'
+    # Specify the width and height of a single thumbnail.
+    embedding_config.sprite.single_image_dim.extend([28, 28])
+    tf.contrib.tensorboard.plugins.projector.visualize_embeddings(
+        main_writer, config)
 
   # Merge all the summaries and write them out to
   # /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
